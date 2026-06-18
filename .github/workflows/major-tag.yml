@@ -1,0 +1,24 @@
+name: Maintain major tag
+
+# When you push a full version tag (e.g. v1.2.0), move the floating major tag
+# (v1) to the same commit so consumers can pin `verica-app/run-action@v1`.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Move the major tag
+        run: |
+          MAJOR="v$(echo "${GITHUB_REF_NAME#v}" | cut -d. -f1)"   # v1.2.0 -> v1
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR" "$GITHUB_SHA"
+          git push origin -f "refs/tags/$MAJOR"

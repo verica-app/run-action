@@ -1,0 +1,108 @@
+name: 'Verica Run'
+description: 'Run a Verica eval and gate the merge on the result (wraps @verica-app/cli; adds a PR comment).'
+author: 'Verica'
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+# Layer-2 sugar over @verica-app/cli. Everything portable (token, trigger, poll,
+# gate, JUnit, resultUrl) lives in the CLI; the ONLY GitHub-specific bit here is
+# the PR comment. Composite action — no build step.
+
+inputs:
+  token:
+    description: 'Verica workspace API token (store as a secret).'
+    required: true
+  eval:
+    description: 'Eval id (mono-prompt). Use `manifest` for multi-prompt.'
+    required: false
+  manifest:
+    description: 'Path to a .verica.yml manifest (multi-prompt).'
+    required: false
+    default: ''
+  prompt:
+    description: 'Prompt template file (mono-prompt).'
+    required: false
+  model:
+    description: 'Model to sample under.'
+    required: false
+  threshold:
+    description: 'Override the gate minimum pass rate (0..1).'
+    required: false
+  baseline-ref:
+    description: 'No-regression baseline = last run on this git ref.'
+    required: false
+  junit:
+    description: 'JUnit output path.'
+    required: false
+    default: 'verica-results.xml'
+  comment:
+    description: 'Post/update a PR comment with the result.'
+    required: false
+    default: 'true'
+  base-url:
+    description: 'Override the API base URL (dev/self-host only; defaults to the hosted API).'
+    required: false
+    default: ''
+  cli-version:
+    description: 'Version range of @verica-app/cli to run.'
+    required: false
+    default: 'latest'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Verica eval
+      id: verica
+      shell: bash
+      env:
+        VERICA_TOKEN: ${{ inputs.token }}
+        VERICA_BASE_URL: ${{ inputs.base-url }}
+      run: |
+        set +e
+        args=(run --wait --json --junit "${{ inputs.junit }}")
+        [ -n "${{ inputs.manifest }}" ]     && args+=(--manifest "${{ inputs.manifest }}")
+        [ -n "${{ inputs.eval }}" ]         && args+=(--eval "${{ inputs.eval }}")
+        [ -n "${{ inputs.prompt }}" ]       && args+=(--prompt "${{ inputs.prompt }}")
+        [ -n "${{ inputs.model }}" ]        && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.threshold }}" ]    && args+=(--threshold "${{ inputs.threshold }}")
+        [ -n "${{ inputs.baseline-ref }}" ] && args+=(--baseline-ref "${{ inputs.baseline-ref }}")
+        # git-sha / git-ref are auto-detected from GITHUB_SHA / GITHUB_REF by the CLI.
+        npx -y "@verica-app/cli@${{ inputs.cli-version }}" "${args[@]}" > verica-result.json
+        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the PR
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let results = [];
+          try { results = JSON.parse(fs.readFileSync('verica-result.json', 'utf8')); } catch {}
+          const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
+          const rows = results.map((r) => {
+            if (r.error) return `| \`${r.evalId}\` | ⚠️ error | ${r.error} |`;
+            const verdict = !r.gated ? '➖ ungated' : r.passed ? '✅ pass' : '❌ fail';
+            return `| [\`${r.evalId}\`](${r.resultUrl}) | ${verdict} | ${pct(r.totals?.passRate)} |`;
+          });
+          const body = [
+            '<!-- verica-run -->',
+            '### Verica eval',
+            '',
+            '| Eval | Gate | Pass rate |',
+            '| --- | --- | --- |',
+            ...rows,
+          ].join('\n');
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          const existing = (await github.rest.issues.listComments({ owner, repo, issue_number }))
+            .data.find((c) => c.body && c.body.includes('<!-- verica-run -->'));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
+
+    - name: Enforce the gate
+      shell: bash
+      run: exit ${{ steps.verica.outputs.exit_code }}
