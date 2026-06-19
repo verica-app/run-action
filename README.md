@@ -32,27 +32,37 @@ Mono-prompt (no manifest):
           token: ${{ secrets.VERICA_TOKEN }}
           eval: eval_8x2k9d
           prompt: prompts/support-agent.txt
+          system-prompt: prompts/support-agent.system.txt   # optional — omit to inherit
+          tools: prompts/support-agent.tools.json           # optional — omit to inherit
           model: gpt-4.1-mini
           baseline-ref: main
 ```
 
 ## Inputs
 
-| Input          | Required | Notes                                                   |
-| -------------- | -------- | ------------------------------------------------------- |
-| `token`        | yes      | Workspace API token (store as a secret).                |
-| `eval`         | —        | Eval id (mono-prompt).                                  |
-| `manifest`     | —        | `.verica.yml` path (multi-prompt).                      |
-| `prompt`       | —        | Prompt template file.                                   |
-| `model`        | —        | Model to sample under.                                  |
-| `threshold`    | —        | Override the gate minimum pass rate (0..1).             |
-| `baseline-ref` | —        | No-regression baseline = last run on this ref.          |
-| `junit`        | —        | JUnit output path (default `verica-results.xml`).       |
-| `comment`      | —        | Post/update a PR comment (default `true`).              |
-| `base-url`     | —        | Dev/self-host override; defaults to the hosted API.     |
-| `cli-version`  | —        | `@verica-app/cli` version to run (default `latest`).    |
+| Input           | Required | Notes                                                       |
+| --------------- | -------- | ----------------------------------------------------------- |
+| `token`         | yes      | Workspace API token (store as a secret).                    |
+| `eval`          | —        | Eval id (mono-prompt).                                      |
+| `manifest`      | —        | `.verica.yml` path (multi-prompt).                          |
+| `prompt`        | —        | User-template file (mono-prompt). Omit to inherit.          |
+| `system-prompt` | —        | System-prompt file (mono-prompt). Omit to inherit.          |
+| `tools`         | —        | Tool-definitions JSON file (mono-prompt). Omit to inherit.  |
+| `model`         | —        | Model to sample under.                                      |
+| `threshold`     | —        | Override the gate minimum pass rate (0..1).                 |
+| `baseline-ref`  | —        | No-regression baseline = last run on this ref.              |
+| `junit`         | —        | JUnit output path (default `verica-results.xml`).           |
+| `comment`       | —        | Post/update a PR comment (default `true`).                  |
+| `base-url`      | —        | Dev/self-host override; defaults to the hosted API.         |
+| `cli-version`   | —        | `@verica-app/cli` version to run (default `^0.1`).          |
 
 The commit SHA and ref are auto-detected from `GITHUB_SHA` / `GITHUB_REF`.
+
+**Prompt push is field-level.** `prompt`, `system-prompt`, and `tools` are
+independent — pass only what you changed and every omitted field is inherited
+from the eval's current prompt version (a new version is created only if the
+merged content differs). For multi-prompt, set `systemPrompt:` / `tools:` per
+entry in the `.verica.yml` manifest instead.
 
 ## Exit codes
 

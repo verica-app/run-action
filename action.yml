@@ -21,7 +21,13 @@ inputs:
     required: false
     default: ''
   prompt:
-    description: 'Prompt template file (mono-prompt).'
+    description: 'Prompt template file (mono-prompt). Omit to inherit the current version.'
+    required: false
+  system-prompt:
+    description: 'System-prompt file (mono-prompt). Omit to inherit the current version.'
+    required: false
+  tools:
+    description: 'Tool-definitions JSON file (mono-prompt). Omit to inherit the current version.'
     required: false
   model:
     description: 'Model to sample under.'
@@ -45,9 +51,9 @@ inputs:
     required: false
     default: ''
   cli-version:
-    description: 'Version range of @verica-app/cli to run.'
+    description: 'Version range of @verica-app/cli to run. The CLI is pre-1.0 (minor = breaking), so this pins to the 0.1.x line by default.'
     required: false
-    default: 'latest'
+    default: '^0.1'
 
 runs:
   using: 'composite'
@@ -61,12 +67,14 @@ runs:
       run: |
         set +e
         args=(run --wait --json --junit "${{ inputs.junit }}")
-        [ -n "${{ inputs.manifest }}" ]     && args+=(--manifest "${{ inputs.manifest }}")
-        [ -n "${{ inputs.eval }}" ]         && args+=(--eval "${{ inputs.eval }}")
-        [ -n "${{ inputs.prompt }}" ]       && args+=(--prompt "${{ inputs.prompt }}")
-        [ -n "${{ inputs.model }}" ]        && args+=(--model "${{ inputs.model }}")
-        [ -n "${{ inputs.threshold }}" ]    && args+=(--threshold "${{ inputs.threshold }}")
-        [ -n "${{ inputs.baseline-ref }}" ] && args+=(--baseline-ref "${{ inputs.baseline-ref }}")
+        [ -n "${{ inputs.manifest }}" ]      && args+=(--manifest "${{ inputs.manifest }}")
+        [ -n "${{ inputs.eval }}" ]          && args+=(--eval "${{ inputs.eval }}")
+        [ -n "${{ inputs.prompt }}" ]        && args+=(--prompt "${{ inputs.prompt }}")
+        [ -n "${{ inputs.system-prompt }}" ] && args+=(--system-prompt "${{ inputs.system-prompt }}")
+        [ -n "${{ inputs.tools }}" ]         && args+=(--tools "${{ inputs.tools }}")
+        [ -n "${{ inputs.model }}" ]         && args+=(--model "${{ inputs.model }}")
+        [ -n "${{ inputs.threshold }}" ]     && args+=(--threshold "${{ inputs.threshold }}")
+        [ -n "${{ inputs.baseline-ref }}" ]  && args+=(--baseline-ref "${{ inputs.baseline-ref }}")
         # git-sha / git-ref are auto-detected from GITHUB_SHA / GITHUB_REF by the CLI.
         npx -y "@verica-app/cli@${{ inputs.cli-version }}" "${args[@]}" > verica-result.json
         echo "exit_code=$?" >> "$GITHUB_OUTPUT"
