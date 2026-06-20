@@ -38,6 +38,17 @@ inputs:
   baseline-ref:
     description: 'No-regression baseline = last run on this git ref.'
     required: false
+  reuse-if-unchanged:
+    description: 'Reuse a recent completed run instead of re-executing when the config (prompt + model + sampling + dataset + graders) is unchanged. Off by default. Incompatible with threshold / baseline-ref.'
+    required: false
+    default: 'false'
+  reuse-max-age:
+    description: 'Max age in hours of a reusable run (default 24, max 720).'
+    required: false
+  reuse-same-ref:
+    description: 'Only reuse a run on the same git ref (default: any ref).'
+    required: false
+    default: 'false'
   junit:
     description: 'JUnit output path.'
     required: false
@@ -75,13 +86,22 @@ runs:
         [ -n "${{ inputs.model }}" ]         && args+=(--model "${{ inputs.model }}")
         [ -n "${{ inputs.threshold }}" ]     && args+=(--threshold "${{ inputs.threshold }}")
         [ -n "${{ inputs.baseline-ref }}" ]  && args+=(--baseline-ref "${{ inputs.baseline-ref }}")
-        # git-sha / git-ref are auto-detected from GITHUB_SHA / GITHUB_REF by the CLI.
+        [ "${{ inputs.reuse-if-unchanged }}" = "true" ] && args+=(--reuse-if-unchanged)
+        [ -n "${{ inputs.reuse-max-age }}" ]            && args+=(--reuse-max-age "${{ inputs.reuse-max-age }}")
+        [ "${{ inputs.reuse-same-ref }}" = "true" ]     && args+=(--reuse-same-ref)
+        # On a PR, GITHUB_SHA is the ephemeral merge commit and GITHUB_REF is
+        # refs/pull/N/merge — point provenance at the PR head so the run UI's SHA
+        # links to a real commit on the branch. (Empty on non-PR events → CLI
+        # falls back to GITHUB_SHA/GITHUB_REF. The repo URL is auto-detected from
+        # GITHUB_SERVER_URL/GITHUB_REPOSITORY.)
+        [ -n "${{ github.event.pull_request.head.sha }}" ] && args+=(--git-sha "${{ github.event.pull_request.head.sha }}")
+        [ -n "${{ github.head_ref }}" ]                    && args+=(--git-ref "${{ github.head_ref }}")
         npx -y "@verica-app/cli@${{ inputs.cli-version }}" "${args[@]}" > verica-result.json
         echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
     - name: Comment on the PR
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
         script: |
           const fs = require('fs');
@@ -90,7 +110,8 @@ runs:
           const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
           const rows = results.map((r) => {
             if (r.error) return `| \`${r.evalId}\` | ⚠️ error | ${r.error} |`;
-            const verdict = !r.gated ? '➖ ungated' : r.passed ? '✅ pass' : '❌ fail';
+            const verdict =
+              (!r.gated ? '➖ ungated' : r.passed ? '✅ pass' : '❌ fail') + (r.reused ? ' ♻️' : '');
             return `| [\`${r.evalId}\`](${r.resultUrl}) | ${verdict} | ${pct(r.totals?.passRate)} |`;
           });
           const body = [

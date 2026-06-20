@@ -51,18 +51,33 @@ Mono-prompt (no manifest):
 | `model`         | —        | Model to sample under.                                      |
 | `threshold`     | —        | Override the gate minimum pass rate (0..1).                 |
 | `baseline-ref`  | —        | No-regression baseline = last run on this ref.              |
+| `reuse-if-unchanged` | —   | Reuse a recent completed run when the config is unchanged (default `false`). |
+| `reuse-max-age` | —        | Max age in hours of a reusable run (default 24, max 720).   |
+| `reuse-same-ref`| —        | Only reuse a run on the same git ref (default `false`).     |
 | `junit`         | —        | JUnit output path (default `verica-results.xml`).           |
 | `comment`       | —        | Post/update a PR comment (default `true`).                  |
 | `base-url`      | —        | Dev/self-host override; defaults to the hosted API.         |
 | `cli-version`   | —        | `@verica-app/cli` version to run (default `^0.1`).          |
 
-The commit SHA and ref are auto-detected from `GITHUB_SHA` / `GITHUB_REF`.
+The commit SHA, ref, and **repo URL** are auto-detected from the runner env
+(`GITHUB_SHA` / `GITHUB_REF` / `GITHUB_SERVER_URL` / `GITHUB_REPOSITORY`), so the run's
+SHA links back to the commit in the Verica UI. On a `pull_request` the action stamps the
+**PR head** commit (not the ephemeral merge commit) so that link points at a real commit
+on the branch.
 
 **Prompt push is field-level.** `prompt`, `system-prompt`, and `tools` are
 independent — pass only what you changed and every omitted field is inherited
 from the eval's current prompt version (a new version is created only if the
 merged content differs). For multi-prompt, set `systemPrompt:` / `tools:` per
 entry in the `.verica.yml` manifest instead.
+
+**Reuse is opt-in.** Set `reuse-if-unchanged: true` to skip re-execution when the
+config (prompt + model + sampling + dataset + graders) matches a recent **completed**
+run; the action returns that run's frozen verdict (marked ♻️ in the PR comment).
+It's freshness-bounded (`reuse-max-age`, default 24h) because a reused verdict can't
+see provider-side drift, and it can't be combined with `threshold` / `baseline-ref`.
+Leave it `false` (the default) to always run fresh — usually what you want, since
+re-running is how an eval catches model drift.
 
 ## Exit codes
 
