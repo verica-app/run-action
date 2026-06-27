@@ -75,9 +75,11 @@ entry in the `.verica.yml` manifest instead.
 config (prompt + model + sampling + dataset + graders) matches a recent **completed**
 run; the action returns that run's frozen verdict (marked ♻️ in the PR comment).
 It's freshness-bounded (`reuse-max-age`, default 24h) because a reused verdict can't
-see provider-side drift, and it can't be combined with `threshold` / `baseline-ref`.
-Leave it `false` (the default) to always run fresh — usually what you want, since
-re-running is how an eval catches model drift.
+see provider-side drift. It can't be combined with `threshold` / `baseline-ref`: a
+cached verdict can't be recomputed for a new `threshold`, and no-regression compares
+against a moving baseline (the last run on the ref), so it can never be a fresh check —
+gate on either and you must run fresh. Leave reuse `false` (the default) to always run
+fresh — usually what you want, since re-running is how an eval catches model drift.
 
 ## Exit codes
 

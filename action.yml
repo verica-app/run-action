@@ -109,10 +109,13 @@ runs:
           try { results = JSON.parse(fs.readFileSync('verica-result.json', 'utf8')); } catch {}
           const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
           const rows = results.map((r) => {
+            // On error the trigger failed before returning a name — show the eval id you passed.
             if (r.error) return `| \`${r.evalId}\` | ⚠️ error | ${r.error} |`;
+            // Otherwise label with the eval's name when the API supplied it, else the id.
+            const label = r.evalName || r.evalId;
             const verdict =
               (!r.gated ? '➖ ungated' : r.passed ? '✅ pass' : '❌ fail') + (r.reused ? ' ♻️' : '');
-            return `| [\`${r.evalId}\`](${r.resultUrl}) | ${verdict} | ${pct(r.totals?.passRate)} |`;
+            return `| [${label}](${r.resultUrl}) | ${verdict} | ${pct(r.totals?.passRate)} |`;
           });
           const body = [
             '<!-- verica-run -->',
